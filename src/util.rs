@@ -944,17 +944,20 @@ pub fn new_reqwest_blocking_client() -> reqwest::blocking::Client {
         .expect("http client must build with success")
 }
 
-fn unhex(b: u8) -> Result<u8> {
+fn unhex(b: u8) -> std::io::Result<u8> {
     match b {
         b'0'..=b'9' => Ok(b - b'0'),
         b'a'..=b'f' => Ok(b - b'a' + 10),
         b'A'..=b'F' => Ok(b - b'A' + 10),
-        _ => Err(anyhow!("invalid hex digit")),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid hex digit",
+        )),
     }
 }
 
 /// A reverse version of std::ascii::escape_default
-pub fn ascii_unescape_default(s: &[u8]) -> Result<Vec<u8>> {
+pub fn ascii_unescape_default(s: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::with_capacity(s.len() + 4);
     let mut offset = 0;
     while offset < s.len() {
@@ -962,7 +965,10 @@ pub fn ascii_unescape_default(s: &[u8]) -> Result<Vec<u8>> {
         if c == b'\\' {
             offset += 1;
             if offset >= s.len() {
-                return Err(anyhow!("incomplete escape sequence"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "incomplete escape",
+                ));
             }
             let c = s[offset];
             match c {
@@ -975,13 +981,21 @@ pub fn ascii_unescape_default(s: &[u8]) -> Result<Vec<u8>> {
                 b'x' => {
                     offset += 1;
                     if offset + 1 >= s.len() {
-                        return Err(anyhow!("incomplete hex escape"));
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "incomplete hex escape",
+                        ));
                     }
                     let v = unhex(s[offset])? << 4 | unhex(s[offset + 1])?;
                     out.push(v);
                     offset += 1;
                 }
-                _ => return Err(anyhow!("invalid escape sequence: \\{}", c as char)),
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "invalid escape",
+                    ));
+                }
             }
         } else {
             out.push(c);
